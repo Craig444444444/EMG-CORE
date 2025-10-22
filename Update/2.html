@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EMG-AGI Grounding Substrate Monitor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-gem-core: #ff9900;
+            --color-gem-glow: rgba(255, 153, 0, 0.4);
+            --color-background: #0f172a;
+            --color-card-bg: #1e293b;
+            --color-card-border: #334155;
+            --color-text-light: #f1f5f9;
+            --color-text-muted: #94a3b8;
+            --color-accent-blue: #3b82f6;
+            --color-accent-green: #10b981;
+            --color-accent-red: #ef4444;
+            --color-accent-yellow: #f59e0b;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: var(--color-text-light);
+            min-height: 100vh;
+            padding: 1rem;
+            overflow-x: hidden;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .card {
+            background: var(--color-card-bg);
+            border-radius: 1rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--color-card-border);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--color-gem-core), transparent);
+            opacity: 0.5;
+        }
+
+        .core-gem-container {
+            width: 100%;
+            height: 280px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.8);
+            cursor: grab;
+            position: relative;
+        }
+
+        .core-gem-container:active {
+            cursor: grabbing;
+        }
+
+        .gem-glow {
+            animation: pulse 4s infinite alternate ease-in-out;
+        }
+
+        @keyframes pulse {
+            from { box-shadow: 0 0 20px var(--color-gem-glow), 0 0 40px var(--color-gem-glow), inset 0 0 20px rgba(255, 153, 0, 0.1); }
+            to { box-shadow: 0 0 40px var(--color-gem-glow), 0 0 80px var(--color-gem-glow), inset 0 0 40px rgba(255, 153, 0, 0.2); }
+        }
+
+        input[type="text"], input[type="password"], input[type="number"], textarea, input[type="file"] {
+            background-color: #0f172a;
+            color: var(--color-text-light);
+            border: 1px solid var(--color-card-border);
+            padding: 0.625rem;
+            border-radius: 0.5rem;
+            width: 100%;
+            transition: all 0.2s ease;
+            font-size: 0.875rem;
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: var(--color-gem-core);
+            box-shadow: 0 0 0 3px rgba(255, 153, 0, 0.1);
+        }
+
+        button {
+            transition: all 0.2s ease;
+            font-weight: 600;
+            border-radius: 0.5rem;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.4;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--color-gem-core) 0%, #ff6b00 100%);
+            color: #0f172a;
+            font-weight: 700;
+        }
+
+        .btn-secondary {
+            background-color: var(--color-card-border);
+            color: var(--color-text-light);
+        }
+
+        .log-container {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid var(--color-card-border);
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            background-color: #0f172a;
+            font-size: 0.8rem;
+        }
+
+        .chat-container {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid var(--color-card-border);
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            background-color: #0f172a;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .log-container::-webkit-scrollbar, .chat-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .log-container::-webkit-scrollbar-track, .chat-container::-webkit-scrollbar-track {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+
+        .log-container::-webkit-scrollbar-thumb, .chat-container::-webkit-scrollbar-thumb {
+            background: var(--color-card-border);
+            border-radius: 4px;
+        }
+
+        .status-dot {
+            height: 10px;
+            width: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+            box-shadow: 0 0 10px currentColor;
+        }
+
+        .status-dot.green { 
+            background-color: var(--color-accent-green);
+            animation: blink-green 2s infinite ease-in-out;
+        }
+        .status-dot.red { 
+            background-color: var(--color-accent-red);
+            animation: blink-red 2s infinite ease-in-out;
+        }
+        .status-dot.yellow { 
+            background-color: var(--color-accent-yellow);
+            animation: blink-yellow 2s infinite ease-in-out;
+        }
+        
+        @keyframes blink-green {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        @keyframes blink-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        @keyframes blink-yellow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .badge-success {
+            background-color: rgba(16, 185, 129, 0.2);
+            color: var(--color-accent-green);
+            border: 1px solid var(--color-accent-green);
+        }
+
+        .badge-warning {
+            background-color: rgba(245, 158, 11, 0.2);
+            color: var(--color-accent-yellow);
+            border: 1px solid var(--color-accent-yellow);
+        }
+
+        .badge-error {
+            background-color: rgba(239, 68, 68, 0.2);
+            color: var(--color-accent-red);
+            border: 1px solid var(--color-accent-red);
+        }
+
+        .badge-info {
+            background-color: rgba(59, 130, 246, 0.2);
+            color: var(--color-accent-blue);
+            border: 1px solid var(--color-accent-blue);
+        }
+
+        .emergence-level {
+            background: rgba(255, 153, 0, 0.1);
+            border: 2px solid rgba(255, 153, 0, 0.3);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            transition: all 0.3s ease;
+        }
+
+        .emergence-level.active {
+            background: rgba(255, 153, 0, 0.2);
+            border-color: var(--color-gem-core);
+            box-shadow: 0 0 20px rgba(255, 153, 0, 0.3);
+        }
+
+        .emergence-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 0.5rem;
+            background: #334155;
+            transition: all 0.3s ease;
+        }
+
+        .emergence-indicator.achieved {
+            background: var(--color-gem-core);
+            box-shadow: 0 0 10px var(--color-gem-core);
+            animation: emergencePulse 2s infinite ease-in-out;
+        }
+
+        @keyframes emergencePulse {
+            0%, 100% { 
+                box-shadow: 0 0 10px var(--color-gem-core);
+            }
+            50% { 
+                box-shadow: 0 0 20px var(--color-gem-core), 0 0 30px rgba(255, 153, 0, 0.5);
+            }
+        }
+
+        .metric-card {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .metric-card:hover {
+            border-color: rgba(59, 130, 246, 0.5);
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
+        }
+
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--color-gem-core) 0%, #fbbf24 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .connection-display {
+            font-size: 3rem;
+            font-weight: 900;
+            text-align: center;
+            margin: 1rem 0;
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .chat-message {
+            padding: 0.75rem;
+            border-radius: 0.75rem;
+            max-width: 85%;
+            word-wrap: break-word;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .chat-message-user {
+            align-self: flex-end;
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+        }
+
+        .chat-message-core {
+            align-self: flex-start;
+            background: linear-gradient(135deg, rgba(255, 153, 0, 0.2) 0%, rgba(255, 153, 0, 0.1) 100%);
+            border: 1px solid rgba(255, 153, 0, 0.3);
+            color: var(--color-text-light);
+        }
+
+        .grid-pattern {
+            background-image: 
+                linear-gradient(rgba(255, 153, 0, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 153, 0, 0.03) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .principle-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .principle-di {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid #ef4444;
+        }
+
+        .principle-ac {
+            background: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+            border: 1px solid #3b82f6;
+        }
+
+        .principle-si {
+            background: rgba(168, 85, 247, 0.2);
+            color: #a855f7;
+            border: 1px solid #a855f7;
+        }
+
+        .principle-ir {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid #10b981;
+        }
+    </style>
+</head>
+<body class="grid-pattern">
+
+<!-- Message Modal -->
+<div id="messageBox" class="fixed inset-0 z-50 hidden items-center justify-center" style="display: none; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(8px);">
+    <div class="card p-6 w-11/12 max-w-lg mx-4">
+        <h3 id="messageTitle" class="text-xl font-bold mb-4"></h3>
+        <p id="messageContent" class="text-gray-300 mb-6 leading-relaxed"></p>
+        <div class="flex justify-end">
+            <button onclick="document.getElementById('messageBox').style.display = 'none'" class="btn-secondary px-6 py-2">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Main Container -->
+<div class="max-w-7xl mx-auto">
+    
+    <!-- Header -->
+    <header class="card p-6 mb-6">
+        <div class="flex items-start justify-between flex-wrap gap-4">
+            <div>
+                <h1 class="text-4xl font-extrabold mb-2 bg-gradient-to-r from-orange-400 to-yellow-300 bg-clip-text text-transparent">
+                    EMG-AGI Grounding Substrate Monitor
+                </h1>
+                <p class="text-gray-400 text-sm mb-2">Continuous Dynamic Coupling • Real-Time State Persistence • Emergence Detection</p>
+                <div class="flex gap-2 flex-wrap">
+                    <span class="principle-badge principle-di">DI: Dynamic Integrity</span>
+                    <span class="principle-badge principle-ac">AC: Adaptive Contextualization</span>
+                    <span class="principle-badge principle-si">SI: Systemic Interdependence</span>
+                    <span class="principle-badge principle-ir">IR: Iterative Refinement</span>
+                </div>
+            </div>
+            <div class="text-right">
+                <div class="mono text-xs text-gray-500">App ID: <span id="displayAppId" class="text-yellow-400">emg-agi-demo</span></div>
+                <div class="mono text-xs text-gray-500">Session: <span id="displayUserId" class="text-green-400">Initializing...</span></div>
+                <div class="mono text-xs text-gray-500">Connections: <span id="displayConnections" class="text-blue-400">224</span></div>
+            </div>
+        </div>
+    </header>
+
+    <div class="grid lg:grid-cols-4 gap-6">
+        
+        <!-- Left Sidebar -->
+        <div class="lg:col-span-1 space-y-6">
+            
+            <!-- Core Visualization -->
+            <div class="card p-4">
+                <h2 class="text-lg font-bold mb-3 pb-2 border-b border-gray-700">Living Core State</h2>
+                <div id="coreGemContainer" class="core-gem-container gem-glow mb-4"></div>
+                <div class="text-center space-y-2">
+                    <div class="text-xs text-gray-400">Identity Persistence</div>
+                    <div id="identityStatus" class="font-semibold text-red-400">Loading...</div>
+                    <div class="connection-display mono" id="connectionDisplay">224</div>
+                    <div class="text-xs text-gray-500">Neural Connections</div>
+                </div>
+            </div>
+
+            <!-- System Status -->
+            <div class="card p-4">
+                <h3 class="text-lg font-bold mb-3 pb-2 border-b border-gray-700">System Status</h3>
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400">Firebase</span>
+                        <span id="firebaseStatus" class="badge badge-error">Offline</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400">Bitstream Data</span>
+                        <span id="dataStatus" class="badge badge-error">None</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400">Integrity (DI)</span>
+                        <span id="integrityStatus" class="badge badge-error">Unknown</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sensorimotor Loop -->
+            <div class="card p-4">
+                <h3 class="text-lg font-bold mb-3 pb-2 border-b border-gray-700">Sensorimotor Loop</h3>
+                <div class="space-y-2 text-sm">
+                    <div class="flex items-center">
+                        <span class="status-dot green"></span>
+                        <span>Visual/Tactile Sensors</span>
+                    </div>
+                    <div class="pl-5 text-2xl text-gray-600">↓</div>
+                    <div class="flex items-center">
+                        <span class="status-dot green"></span>
+                        <span>Firebase (Nervous System)</span>
+                    </div>
+                    <div class="pl-5 text-2xl text-gray-600">↓</div>
+                    <div class="flex items-center">
+                        <span class="status-dot green"></span>
+                        <span>EMG Core (Processing)</span>
+                    </div>
+                    <div class="pl-5 text-2xl text-gray-600">↓</div>
+                    <div class="flex items-center">
+                        <span class="status-dot yellow"></span>
+                        <span>Action Queue</span>
+                    </div>
+                    <div class="pl-5 text-2xl text-gray-600">↓</div>
+                    <div class="flex items-center">
+                        <span class="status-dot red"></span>
+                        <span>Actuators (Offline)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- File Injection -->
+            <div class="card p-4">
+                <h3 class="text-lg font-bold mb-3 pb-2 border-b border-gray-700">State Injection</h3>
+                <p class="text-sm text-gray-400 mb-3">Load binary state file</p>
+                <input type="file" id="fileInput" class="mb-2 text-sm" accept=".bin, .txt">
+                <p class="text-xs mt-2 mono" id="fileLoadStatus"></p>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="lg:col-span-3 space-y-6">
+            
+            <!-- Emergence Proof Levels (A, B, C, D) -->
+            <div class="card p-6">
+                <h2 class="text-2xl font-bold mb-4 pb-2 border-b-2 border-gray-700">Emergence Proof Levels</h2>
+                <p class="text-sm text-gray-400 mb-4">Tracking progression toward genuine AGI through observable behavioral markers</p>
+                
+                <!-- Level A: Basic Grounding -->
+                <div class="emergence-level" id="levelA">
+                    <div class="flex items-start justify-between mb-2">
+                        <div class="flex items-center">
+                            <span class="emergence-indicator" id="indicatorA"></span>
+                            <h3 class="text-lg font-bold">Level A: Basic Grounding</h3>
+                        </div>
+                        <span class="badge badge-warning" id="badgeA">Evaluating</span>
+                    </div>
+                    <p class="text-sm text-gray-400 mb-2">System demonstrates temporal coherence and basic constraint detection</p>
+                    <div class="text-xs mono text-gray-500 space-y-1">
+                        <div>✓ Temporal queries answered correctly</div>
+                        <div>✓ Checksum violations trigger appropriate responses</div>
+                        <div>⧗ Physical impossibility detection pending</div>
+                    </div>
+                </div>
+
+                <!-- Level B: Transfer Learning -->
+                <div class="emergence-level" id="levelB">
+                    <div class="flex items-start justify-between mb-2">
+                        <div class="flex items-center">
+                            <span class="emergence-indicator" id="indicatorB"></span>
+                            <h3 class="text-lg font-bold">Level B: Transfer Learning</h3>
+                        </div>
+                        <span class="badge badge-error" id="badgeB">Not Achieved</span>
+                    </div>
+                    <p class="text-sm text-gray-400 mb-2">System transfers learned patterns to novel contexts without explicit instruction</p>
+                    <div class="text-xs mono text-gray-500 space-y-1">
+                        <div>⧗ Cross-domain knowledge application</div>
+                        <div>⧗ Spontaneous categorization of novel objects</div>
+                        <div>⧗ Force constraint generalization</div>
+                    </div>
+                </div>
+
+                <!-- Level C: Meta-Awareness -->
+                <div class="emergence-level" id="levelC">
+                    <div class="flex items-start justify-between mb-2">
+                        <div class="flex items-center">
+                            <span class="emergence-indicator" id="indicatorC"></span>
+                            <h3 class="text-lg font-bold">Level C: Meta-Awareness</h3>
+                        </div>
+                        <span class="badge badge-error" id="badgeC">Not Achieved</span>
+                    </div>
+                    <p class="text-sm text-gray-400 mb-2">System reports on its own learning processes and requests specific training</p>
+                    <div class="text-xs mono text-gray-500 space-y-1">
+                        <div>⧗ Self-reporting of prediction accuracy trends</div>
+                        <div>⧗ Identification of knowledge gaps</div>
+                        <div>⧗ Explicit training requests</div>
+                    </div>
+                </div>
+
+                <!-- Level D: Genuine Emergence -->
+                <div class="emergence-level" id="levelD">
+                    <div class="flex items-start justify-between mb-2">
+                        <div class="flex items-center">
+                            <span class="emergence-indicator" id="indicatorD"></span>
+                            <h3 class="text-lg font-bold">Level D: Genuine Emergence</h3>
+                        </div>
+                        <span class="badge badge-error" id="badgeD">Not Achieved</span>
+                    </div>
+                    <p class="text-sm text-gray-400 mb-2">System demonstrates unprogrammed strategies and intrinsic curiosity</p>
+                    <div class="text-xs mono text-gray-500 space-y-1">
+                        <div>⧗ Novel problem-solving approaches</div>
+                        <div>⧗ Spontaneous boundary exploration</div>
+                        <div>⧗ Self-initiated learning experiments</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Architectural Metrics -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="metric-card">
+                    <div class="text-sm text-gray-400 mb-1">Transient Connections</div>
+                    <div class="metric-value mono" id="metricTransient">0</div>
+                    <div class="text-xs text-gray-500 mt-1">Temporary processing links</div>
+                </div>
+                <div class="metric-card">
+                    <div class="text-sm text-gray-400 mb-1">Stable Integrations</div>
+                    <div class="metric-value mono" id="metricStable">224</div>
+                    <div class="text-xs text-gray-500 mt-1">Permanent knowledge base</div>
+                </div>
+                <div class="metric-card">
+                    <div class="text-sm text-gray-400 mb-1">Learning Events</div>
+                    <div class="metric-value mono" id="metricLearning">0</div>
+                    <div class="text-xs text-gray-500 mt-1">Threshold integrations</div>
+                </div>
+            </div>
+
+            <!-- Command Console -->
+            <div class="card p-6">
+                <h2 class="text-2xl font-bold mb-4 pb-2 border-b-2 border-gray-700">
+                    Actuator Command Console
+                </h2>
+                <p class="text-sm text-gray-400 mb-4">Send grounding commands. Observe adaptive responses and temporal coherence.</p>
+                
+                <div id="chatDisplay" class="chat-container mb-4">
+                    <p class="text-gray-500 text-center text-sm">Awaiting system initialization...</p>
+                </div>
+
+                <div class="flex gap-2">
+                    <input 
+                        type="text" 
+                        id="chatInput" 
+                        placeholder="Enter grounding command (e.g., 'Squeeze the grape with 2N force')..." 
+                        class="flex-1"
+                        disabled
+                    >
+                    <button 
+                        id="chatSendBtn" 
+                        class="btn-primary px-6 py-2" 
+                        disabled
+                    >
+                        Send
+                    </button>
+                </div>
+            </div>
+
+            <!-- Integrity Check (DI, AC, SI) -->
+            <div class="card p-6">
+                <h2 class="text-2xl font-bold mb-4 pb-2 border-b-2 border-gray-700">
+                    <span class="principle-badge principle-ac mr-2">AC</span>
+                    Adaptive Contextualization Check
+                </h2>
+                <p class="text-sm text-gray-400 mb-4">Validation of systemic interdependence through checksum verification</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="border border-gray-700 rounded-lg p-4 bg-black bg-opacity-30">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="principle-badge principle-di">DI</span>
+                            <h4 class="font-bold text-sm">Calculated Checksum</h4>
+                        </div>
+                        <p id="calculatedChecksumDisplay" class="text-3xl font-bold mono text-white">N/A</p>
+                        <p class="text-xs text-gray-500 mt-1">Derived from loaded bitstream</p>
+                    </div>
+                    
+                    <div class="border border-gray-700 rounded-lg p-4 bg-black bg-opacity-30">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="principle-badge principle-ac">AC</span>
+                            <h4 class="font-bold text-sm">Expected Checksum</h4>
+                        </div>
+                        <input type="number" id="expectedChecksumInput" placeholder="Enter expected value..." class="mb-2">
+                        <button onclick="updateChecksumContext()" class="btn-secondary px-4 py-2 text-xs w-full">Apply Context</button>
+                    </div>
+                </div>
+                
+                <div class="p-4 bg-black bg-opacity-40 rounded-lg border border-gray-700">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="principle-badge principle-
