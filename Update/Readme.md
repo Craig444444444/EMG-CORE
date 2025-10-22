@@ -1,3 +1,5 @@
+version one exspect bugs.
+
 simple copy html download binary data load html via gemini create canvas load binary and then create your agi. 
 
 
