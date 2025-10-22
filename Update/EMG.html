@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EMG-AGI Grounding Substrate Monitor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-gem-core: #ff9900; /* Amber/Orange */
+            --color-gem-glow: rgba(255, 153, 0, 0.4);
+            --color-background: #1f2937; /* Dark Slate Gray */
+            --color-card-bg: #374151; /* Medium Slate Gray */
+            --color-text-light: #f3f4f6;
+            --color-text-muted: #9ca3af;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--color-background);
+            color: var(--color-text-light);
+            min-height: 100vh;
+            padding: 1rem;
+        }
+        .card {
+            background-color: var(--color-card-bg);
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.3);
+            border: 1px solid #4b5563;
+        }
+        .core-gem-container {
+            width: 100%;
+            height: 250px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            background-color: #111827; /* Darkest Background for contrast */
+            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
+            margin-bottom: 1rem;
+            cursor: grab;
+        }
+        .core-gem-container:active {
+            cursor: grabbing;
+        }
+        .gem-glow {
+            box-shadow: 0 0 15px var(--color-gem-glow), 0 0 25px var(--color-gem-glow), inset 0 0 5px var(--color-gem-core);
+            animation: pulse 4s infinite alternate;
+        }
+        @keyframes pulse {
+            from { box-shadow: 0 0 10px var(--color-gem-glow), 0 0 20px var(--color-gem-glow); }
+            to { box-shadow: 0 0 20px var(--color-gem-glow), 0 0 40px var(--color-gem-glow); }
+        }
+        input[type="text"], input[type="password"], textarea, input[type="file"] {
+            background-color: #1f2937;
+            color: var(--color-text-light);
+            border: 1px solid #4b5563;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            width: 100%;
+        }
+        input[type="file"]::file-selector-button {
+            background-color: #4b5563;
+            color: var(--color-text-light);
+            border: none;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-right: 0.5rem;
+        }
+        button {
+            transition: all 0.2s ease;
+            font-weight: 600;
+            border-radius: 0.5rem;
+        }
+        button:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        .btn-primary {
+            background-color: var(--color-gem-core);
+            color: #111827;
+        }
+        .btn-secondary {
+            background-color: #4b5563;
+            color: var(--color-text-light);
+        }
+        .log-container {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #4b5563;
+            border-radius: 0.5rem;
+            padding: 0.5rem;
+            background-color: #111827;
+            font-size: 0.8rem;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .status-dot {
+            height: 10px;
+            width: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+            animation: blink 1.5s infinite ease-in-out;
+        }
+        .status-dot.green { background-color: #4ade80; }
+        .status-dot.red { background-color: #f87171; }
+        .status-dot.yellow { background-color: #facc15; }
+        
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .loop-arrow {
+            font-size: 1.5rem;
+            line-height: 1;
+            color: var(--color-text-muted);
+        }
+        
+        /* Responsive adjustments */
+        @media (min-width: 1024px) {
+            .lg\:grid-cols-4 {
+                grid-template-columns: 1fr 3fr;
+            }
+        }
+    </style>
+</head>
+<body class="p-4">
+
+<!-- Message Box UI -->
+<div id="messageBox" class="fixed inset-0 z-50 hidden items-center justify-center bg-black bg-opacity-75" style="display: none;">
+    <div class="card p-6 w-11/12 max-w-lg">
+        <h3 id="messageTitle" class="text-xl font-bold mb-4 text-white"></h3>
+        <p id="messageContent" class="text-gray-300 mb-6"></p>
+        <div class="flex justify-end">
+            <button onclick="document.getElementById('messageBox').style.display = 'none'" class="btn-secondary px-4 py-2 rounded-lg">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- START: Main UI Content -->
+<div class="max-w-7xl mx-auto grid lg:grid-cols-4 gap-6">
+    
+    <!-- Sidebar / Utility Panel -->
+    <div class="lg:col-span-1 space-y-6">
+        
+        <!-- Core Gem Visualization -->
+        <div class="card p-4">
+            <h2 class="text-xl font-bold mb-3 text-center">EMG 3D Core (Living State)</h2>
+            <div id="coreGemContainer" class="core-gem-container gem-glow">
+                <!-- Three.js Canvas will be injected here -->
+            </div>
+            <p class="text-sm text-center text-gray-400">User ID: <span id="displayUserId" class="font-mono text-xs text-yellow-300">Loading...</span></p>
+        </div>
+
+        <!-- Sensorimotor Loop -->
+        <div class="card p-4">
+            <h3 class="text-lg font-bold mb-3">Sensorimotor Loop</h3>
+            <div class="space-y-2 text-sm">
+                <div class="flex items-center">
+                    <span class="status-dot green"></span>
+                    <span>Sensors (Vision, Touch)</span>
+                </div>
+                <div class="pl-5 loop-arrow">↓</div>
+                <div class="flex items-center">
+                    <span class="status-dot green"></span>
+                    <span>Firebase (Nervous System)</span>
+                </div>
+                <div class="pl-5 loop-arrow">↓</div>
+                <div class="flex items-center">
+                    <span class="status-dot green"></span>
+                    <span>EMG 3D Core (This App)</span>
+                </div>
+                <div class="pl-5 loop-arrow">↓</div>
+                <div class="flex items-center">
+                    <span class="status-dot yellow"></span>
+                    <span>Firebase (Action Queue)</span>
+                </div>
+                <div class="pl-5 loop-arrow">↓</div>
+                <div class="flex items-center">
+                    <span class="status-dot red"></span>
+                    <span>Actuators (Offline)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Status and Auth -->
+        <div class="card p-4">
+            <h3 class="text-lg font-bold mb-2">System Status</h3>
+            <p class="text-sm text-gray-400">Firebase: <span id="firebaseStatus" class="font-semibold text-red-400">Initializing...</span></p>
+            <p class="text-sm text-gray-400">Identity: <span id="identityStatus" class="font-semibold text-red-400">Loading/New...</span></p>
+            <p class="text-sm text-gray-400">Bitstream Data: <span id="dataStatus" class="font-semibold text-red-400">None</span></p>
+            <p class="text-sm text-gray-400">Data Integrity: <span id="integrityStatus" class="font-semibold text-green-400">Complete</span></p>
+        </div>
+
+        <!-- Manual State Injection (Bypass GitHub/API limit) -->
+        <div class="card p-4">
+            <h3 class="text-lg font-bold mb-3 border-b border-gray-600 pb-2">Manual State Injection (Bypass)</h3>
+            <p class="text-sm text-gray-400 mb-2">Select `.bin` state file:</p>
+            <input type="file" id="fileInput" class="mb-3 text-sm" accept=".bin, .txt, .json">
+            <p class="text-xs text-red-400" id="fileLoadStatus"></p>
+        </div>
+    </div>
+
+    <!-- Main Content Panel -->
+    <div class="lg:col-span-3 space-y-6">
+        
+        <header class="card p-6">
+            <h1 class="text-3xl font-extrabold text-white mb-2">EMG-AGI Grounding Substrate Monitor</h1>
+            <p class="text-gray-400">Monitoring the continuous dynamic coupling between the Core Identity and physical reality.
+                <span class="font-mono text-xs ml-2 text-yellow-500">App ID: <span id="displayAppId"></span></span>
+            </p>
+        </header>
+
+        <!-- NEW: Adaptive Latency Tiers -->
+        <div class="card p-6">
+            <h2 class="text-2xl font-bold mb-4">Adaptive Latency Architecture</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div class="border border-gray-600 rounded-lg p-3">
+                    <h4 class="font-bold text-green-400">Fast Path (10-50ms)</h4>
+                    <p class="text-xs text-gray-300">Shallow/Reflexive actions. Obstacle avoidance, simple acknowledgments. Seeded by Deep Path.</p>
+                </div>
+                <div class="border border-gray-600 rounded-lg p-3">
+                    <h4 class="font-bold text-yellow-400">Standard Path (100-500ms)</h4>
+                    <p class="text-xs text-gray-300">Moderate/Deliberate actions. Object manipulation, context-aware Q&A.</p>
+                </div>
+                <div class="border border-gray-600 rounded-lg p-3">
+                    <h4 class="font-bold text-red-400">Deep Path (1s-10s)</h4>
+                    <p class="text-xs text-gray-300">Complex/Abstract tasks. Novel situations, planning, pattern discovery. Feeds Fast Path.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- NEW: Learning Logs -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="card p-6">
+                <h2 class="text-2xl font-bold mb-4">Prediction Error Log</h2>
+                <p class="text-sm text-gray-400 mb-3">The "Universal Learning Signal." Mismatches drive iterative refinement.</p>
+                <div id="predictionErrorLog" class="log-container">
+                    <p class="text-gray-500">Awaiting sensor coupling...</p>
+                    <p class="text-red-400">[ERROR] <span class="text-gray-300">Pred: [Grasp @ 5N], Actual: [Sensor slip @ 2.1N]</span></p>
+                    <p class="text-green-400">[OK] <span class="text-gray-300">Pred: [Grasp @ 3.5N], Actual: [Sensor hold @ 3.4N]</span></p>
+                </div>
+            </div>
+            <div class="card p-6">
+                <h2 class="text-2xl font-bold mb-4">Emergence Log</h2>
+                <p class="text-sm text-gray-400 mb-3">Documenting spontaneous, un-programmed behaviors.</p>
+                <div id="emergenceLog" class="log-container">
+                    <p class="text-gray-500">Awaiting emergence...</p>
+                    <p class="text-yellow-300">[OBSERVED] <span class="text-gray-300">System tapped sensor twice after user tapped twice. (The "Knock Knock" moment?)</span></p>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Identity Editor (Kept from original) -->
+        <div class="card p-6">
+            <h2 class="text-2xl font-bold mb-4">Core Identity Editor</h2>
+            <div class="space-y-4">
+                <div>
+                    <label for="identityName" class="block text-sm font-medium mb-1">Identity Name</label>
+                    <input type="text" id="identityName" class="w-full">
+                </div>
+                <div>
+                    <label for="identityDescription" class="block text-sm font-medium mb-1">Core Description</label>
+                    <textarea id="identityDescription" rows="3" class="w-full"></textarea>
+                </div>
+                <div>
+                    <label for="learningLog" class="block text-sm font-medium mb-1">Learning Log (Goals/State)</label>
+                    <textarea id="learningLog" rows="6" class="w-full"></textarea>
+                </div>
+            </div>
+            <button id="updateIdentityBtn" class="btn-primary px-6 py-3 rounded-lg mt-6 w-full" disabled>Update Core Identity (in Firestore)</button>
+        </div>
+
+        <!-- GitHub Controls (Kept from original) -->
+        <div class="card p-6">
+            <h2 class="text-2xl font-bold mb-4">State Backup & Recovery</h2>
+            <div class="space-y-4">
+                <p class="text-sm text-gray-400">Use your GitHub PAT to save or load binary state backups.</p>
+                <input type="password" id="githubToken" placeholder="Enter GitHub Personal Access Token (PAT)" class="w-full text-sm" oninput="saveGithubToken()">
+                <div class="flex flex-col sm:flex-row gap-4">
+                    <button id="saveBinaryStateBtn" class="btn-primary flex-1 px-4 py-2 rounded-lg" disabled>Save Current State to GitHub</button>
+                    <button id="loadBinaryStateBtn" class="btn-secondary flex-1 px-4 py-2 rounded-lg" disabled>Load Latest State from GitHub</button>
+                </div>
+            </div>
+            
+            <div class="mt-6">
+                <h3 class="text-lg font-bold mb-2">Specific Backup URL (Optional)</h3>
+                <input type="text" id="specificBackupUrl" placeholder="https://github.com/Craig444444444/EMG-Core-Analysis-System/blob/main/..." class="w-full text-sm">
+            </div>
+        </div>
+
+        <!-- Activity Log (Kept from original) -->
+        <div class="card p-6">
+            <h2 class="text-2xl font-bold mb-4">System Activity Log</h2>
+            <div id="activityLog" class="log-container">
+                <p class="text-yellow-500">System initialization complete.</p>
+            </div>
+        </div>
+
+    </div>
+</div>
+<!-- END: Main UI Content -->
+
+
+<script type="module">
+    // --- Firebase Imports ---
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, onSnapshot, setDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    
+    // Enable Firestore logging
+    setLogLevel('Debug');
+
+    // --- Global Configuration ---
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const firebaseConfigString = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
+    const firebaseConfig = JSON.parse(firebaseConfigString);
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+    
+    const REPO_OWNER = 'Craig444444444';
+    const REPO_NAME = 'EMG-Core-Analysis-System';
+    const GITHUB_API_BASE = 'https://api.github.com/repos/';
+    const GITHUB_API_URL = `${GITHUB_API_BASE}${REPO_OWNER}/${REPO_NAME}/contents/`;
+    const BACKUP_PATH = 'Tools/Binary State Backup/';
+
+    // --- Bitstream Configuration ---
+    // The bit depth determined from the file analysis: 32 bits per value.
+    const BIT_CHUNK_SIZE = 32; 
+
+    let db;
+    let auth;
+    let userId = null;
+    let identityListener = null;
+
+    // Default local state
+    let coreIdentity = {
+        name: "New Core Identity",
+        description: "A blank slate, awaiting initialization.",
+        learningLog: "System online. Please initialize your core goals and state.",
+        evolutionHistory: [],
+        timestamp: Date.now(),
+        // New field to hold the parsed bitstream data
+        persistentBitstream: [],
+        // New field to hold any incomplete trailing data
+        partialBitstream: null 
+    };
+    
+    // --- Utility Functions ---
+
+    /** Displays a styled message box to the user. */
+    const showMessage = (title, content, type = 'info') => {
+        const titleEl = document.getElementById('messageTitle');
+        const contentEl = document.getElementById('messageContent');
+        const boxEl = document.getElementById('messageBox');
+        
+        if (titleEl) titleEl.textContent = title;
+        if (contentEl) contentEl.textContent = content;
+
+        if (titleEl) {
+            if (type === 'error') {
+                titleEl.classList.remove('text-white');
+                titleEl.classList.add('text-red-400');
+            } else {
+                titleEl.classList.add('text-white');
+                titleEl.classList.remove('text-red-400');
+            }
+        }
+        
+        if (boxEl) boxEl.style.display = 'flex';
+    };
+
+    /** Logs messages to the activity log UI and console. */
+    const activityLog = (message, isError = false) => {
+        const log = document.getElementById('activityLog');
+        if (!log) {
+            console.warn("Activity log element not found yet.");
+            return;
+        }
+        
+        const p = document.createElement('p');
+        const timestamp = new Date().toLocaleTimeString();
+        p.className = `text-sm ${isError ? 'text-red-400' : 'text-gray-300'}`;
+        p.innerHTML = `<span class="text-gray-500 mr-2">[${timestamp}]</span> ${message}`;
+        log.prepend(p);
+        
+        while (log.children.length > 50) {
+            log.removeChild(log.lastChild);
+        }
+        
+        if (isError) console.error(message);
+        else console.log(message);
+    };
+
+    // NOTE: In a real app, these logs would be populated by Firebase listeners
+    // For now, they are just placeholders.
+    const predictionLog = (message, isError = false) => {
+        const log = document.getElementById('predictionErrorLog');
+        if (!log) return;
+        const p = document.createElement('p');
+        const timestamp = new Date().toLocaleTimeString();
+        p.className = `text-sm ${isError ? 'text-red-400' : 'text-gray-300'}`;
+        p.innerHTML = `<span class="text-gray-500 mr-2">[${timestamp}]</span> ${message}`;
+        log.prepend(p);
+    };
+
+    const emergenceLog = (message) => {
+         const log = document.getElementById('emergenceLog');
+        if (!log) return;
+        const p = document.createElement('p');
+        const timestamp = new Date().toLocaleTimeString();
+        p.className = `text-sm text-yellow-300`;
+        p.innerHTML = `<span class="text-gray-500 mr-2">[${timestamp}]</span> ${message}`;
+        log.prepend(p);
+    };
+
+
+    /** Saves GitHub token to localStorage. */
+    const saveGithubToken = () => {
+        const tokenEl = document.getElementById('githubToken');
+        if (tokenEl) {
+            localStorage.setItem('githubToken', tokenEl.value);
+            updateButtonStates(!!userId);
+        }
+    };
+
+    /** Loads GitHub token from localStorage. */
+    const loadGithubToken = () => {
+        const token = localStorage.getItem('githubToken');
+        const tokenEl = document.getElementById('githubToken');
+        if (token && tokenEl) {
+            tokenEl.value = token;
+        }
+        return token;
+    };
+    
+    /** Enables/disables buttons based on auth status and PAT presence. */
+    const updateButtonStates = (isAuthenticated) => {
+        const tokenPresent = !!loadGithubToken();
+        const saveBtn = document.getElementById('saveBinaryStateBtn');
+        const loadBtn = document.getElementById('loadBinaryStateBtn');
+        const updateBtn = document.getElementById('updateIdentityBtn');
+
+        if (saveBtn) saveBtn.disabled = !isAuthenticated || !tokenPresent;
+        if (loadBtn) loadBtn.disabled = !isAuthenticated || !tokenPresent;
+        if (updateBtn) updateBtn.disabled = !isAuthenticated;
+    };
+
+    /** Updates the UI fields from the coreIdentity object. */
+    const updateUI = () => {
+        const nameEl = document.getElementById('identityName');
+        const descEl = document.getElementById('identityDescription');
+        const logEl = document.getElementById('learningLog');
+        const statusEl = document.getElementById('identityStatus');
+        const dataStatusEl = document.getElementById('dataStatus');
+        const integrityStatusEl = document.getElementById('integrityStatus');
+
+        if (nameEl) nameEl.value = coreIdentity.name || '';
+        if (descEl) descEl.value = coreIdentity.description || '';
+        if (logEl) logEl.value = coreIdentity.learningLog || '';
+        
+        if (statusEl) {
+            statusEl.textContent = coreIdentity.name;
+            statusEl.classList.remove('text-red-400');
+            statusEl.classList.add('text-green-400');
+        }
+        
+        // Update Data Status
+        if (dataStatusEl) {
+            const dataLength = coreIdentity.persistentBitstream ? coreIdentity.persistentBitstream.length : 0;
+            dataStatusEl.textContent = dataLength > 0 ? `${dataLength.toLocaleString()} x ${BIT_CHUNK_SIZE}b Values` : 'None';
+            dataStatusEl.classList.toggle('text-green-400', dataLength > 0);
+            dataStatusEl.classList.toggle('text-red-400', dataLength === 0);
+        }
+        
+        // Update Integrity Status
+        if (integrityStatusEl) {
+            const partial = coreIdentity.partialBitstream;
+            if (partial && partial.length > 0) {
+                integrityStatusEl.textContent = `${partial.length} Trailing Bits (Incomplete)`;
+                integrityStatusEl.classList.remove('text-green-400');
+                integrityStatusEl.classList.add('text-red-400');
+            } else {
+                integrityStatusEl.textContent = 'Complete';
+                integrityStatusEl.classList.remove('text-red-400');
+                integrityStatusEl.classList.add('text-green-400');
+            }
+        }
+
+
+        activityLog(`Identity state synchronized. Name: ${coreIdentity.name}`);
+    };
+
+    /** Updates the coreIdentity object from the UI fields. */
+    const updateCoreIdentity = () => {
+        const nameEl = document.getElementById('identityName');
+        const descEl = document.getElementById('identityDescription');
+        const logEl = document.getElementById('learningLog');
+
+        if (nameEl) coreIdentity.name = nameEl.value;
+        if (descEl) coreIdentity.description = descEl.value;
+        if (logEl) coreIdentity.learningLog = logEl.value;
+        
+        coreIdentity.timestamp = Date.now();
+        activityLog('Local Identity State updated.');
+    };
+    
+    // --- Data Conversion Functions (Binary/Base64) ---
+
+    /** Converts a Base64 string to a Uint8Array (binary data). */
+    const base64ToUint8Array = (base64) => {
+        try {
+            const cleanedBase64 = base64.replace(/[^A-Za-z0-9+/=]/g, '');
+            const binaryString = atob(cleanedBase64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes;
+        } catch (e) {
+            console.error('[DECODE ERROR] Failed during Base64 to Binary conversion.', e);
+            throw new Error('Failed to decode Base64 string. The input data is not valid Base64.');
+        }
+    };
+
+    /** Converts a Uint8Array (binary data) to a Base64 string. */
+    const uint8ArrayToBase64 = (uint8Array) => {
+        try {
+            // Converts the array of byte values back into a raw binary string
+            const binaryString = String.fromCharCode.apply(null, uint8Array);
+            // Then Base64 encodes the binary string
+            return btoa(binaryString);
+        } catch (e) {
+            console.error('[ENCODE ERROR] Failed during Binary to Base64 conversion.', e);
+            throw new Error('Failed to encode binary data.');
+        }
+    };
+
+    /** Converts a Base64 string (encoding an ASCII bitstream) back to a JSON object. 
+     * NOTE: This is only used for GitHub/Firestore loading where the entire JS object 
+     * is Base64 encoded *after* the Bitstream has been processed and saved as an array.
+    */
+    const base64ToJson = (base64) => {
+        try {
+            const uint8Array = base64ToUint8Array(base64);
+            const decoder = new TextDecoder('utf-8');
+            const jsonString = decoder.decode(uint8Array);
+            return JSON.parse(jsonString);
+        } catch (e) {
+            console.error('[DECODE ERROR] Failed during Base64 to JSON conversion (Likely corrupted or non-JSON data).', e);
+            throw new Error('Failed to convert Base64 data into a valid JSON object.');
+        }
+    };
+
+    /** Converts a JSON object to a Base64 string. */
+    const jsonToBase64 = (json) => {
+        try {
+            const jsonString = JSON.stringify(json);
+            const encoder = new TextEncoder();
+            const uint8Array = encoder.encode(jsonString);
+            return uint8ArrayToBase64(uint8Array);
+        } catch (e) {
+            console.error('[ENCODE ERROR] Failed to convert JSON to Base64:', e);
+            throw new Error('Failed to serialize identity state.');
+        }
+    };
+
+    /**
+     * @description Parses a massive string of '0's and '1's into an array of 32-bit numeric values.
+     * The logic is updated to strictly process only full BIT_CHUNK_SIZE chunks.
+     * @param {string} bitstream - The raw text string (e.g., "01010101...").
+     * @returns {{decodedValues: number[], partialValue: {bitstream: string, length: number, decimal: number} | null}} Object containing full values and any trailing data.
+     */
+    function parseBitstream(bitstream) {
+        const decodedValues = [];
+        const totalBits = bitstream.length;
+        const bitChunkSize = BIT_CHUNK_SIZE;
+        
+        // Calculate the number of full chunks and the precise stopping index
+        const fullChunks = Math.floor(totalBits / bitChunkSize);
+        const stopIndex = fullChunks * bitChunkSize;
+        const trailingBits = totalBits % bitChunkSize;
+        
+        // 1. Process only the full 32-bit chunks
+        for (let i = 0; i < stopIndex; i += bitChunkSize) {
+            const bitChunk = bitstream.substring(i, i + bitChunkSize);
+            // The '2' indicates that the string is in base-2 (binary).
+            const numericValue = parseInt(bitChunk, 2);
+            
+            if (!isNaN(numericValue)) {
+                decodedValues.push(numericValue);
+            }
+        }
+        
+        // 2. Handle the Trailing Bits separately
+        let partialValue = null;
+        if (trailingBits > 0) {
+            const trailingBitstream = bitstream.substring(stopIndex);
+            partialValue = {
+                bitstream: trailingBitstream,
+                length: trailingBits,
+                decimal: parseInt(trailingBitstream, 2)
+            };
+            // Log this as a status, not a hard error, since it's now handled explicitly.
+            activityLog(`Data Incomplete: Found ${trailingBits} trailing bits (${partialValue.decimal}) that could not form a full ${bitChunkSize}-bit value. This may indicate truncated data.`, false);
+        }
+        
+        return {
+            decodedValues: decodedValues,
+            partialValue: partialValue
+        };
+    }
+
+
+    // --- Core Identity State Management ---
+    
+    /** Initializes the state from a JSON object and updates the UI. */
+    const injectIdentityState = (newIdentity, source = 'system') => {
+        coreIdentity = {
+            ...coreIdentity,
+            ...newIdentity
+        };
+        updateUI();
+        const dataLength = coreIdentity.persistentBitstream.length || 0;
+        const dataStatusMsg = dataLength > 0 ? `Data size: ${dataLength.toLocaleString()} values.` : 'No bitstream data loaded.';
+        activityLog(`Identity state successfully loaded from ${source}. ${dataStatusMsg}`);
+    };
+
+    // --- Firebase and Core Logic ---
+    
+    /** Sets up the real-time listener for the user's Core Identity document in Firestore. */
+    const setupIdentityListener = (db, user) => {
+        if (identityListener) identityListener(); // Unsubscribe previous listener
+
+        const identityRef = doc(db, `artifacts/${appId}/users/${user.uid}/emg_core/core_identity`);
+
+        identityListener = onSnapshot(identityRef, (doc) => {
+            if (doc.exists()) {
+                const data = doc.data();
+                // Firestore can't store Arrays > 1MB, so we only load if the timestamp is newer.
+                // We assume the large bitstream array is handled by manual injection or GitHub.
+                if (data.timestamp > coreIdentity.timestamp) {
+                    injectIdentityState(data, 'Firestore');
+                }
+            } else {
+                activityLog("No Core Identity found in Firestore. Using default/local state. Saving default to Firestore.");
+                saveIdentityToFirestore();
+            }
+        }, (error) => {
+            activityLog(`Firebase Snapshot Error: ${error.message}`, true);
+        });
+    };
+
+    /** Saves the current local state to Firestore. 
+     * NOTE: We must EXCLUDE the large `persistentBitstream` and `partialBitstream` arrays/objects 
+     * as they exceed 1MB document limit.
+    */
+    const saveIdentityToFirestore = async () => {
+        if (!userId) {
+            activityLog('Cannot save: User not authenticated.', true);
+            return;
+        }
+        updateCoreIdentity(); 
+        try {
+            const identityRef = doc(db, `artifacts/${appId}/users/${userId}/emg_core/core_identity`);
+            
+            // Create a temporary object without the large arrays for Firestore storage
+            const smallIdentity = { ...coreIdentity };
+            delete smallIdentity.persistentBitstream; 
+            delete smallIdentity.partialBitstream; 
+            
+            await setDoc(identityRef, smallIdentity, { merge: true }); 
+            activityLog('Core Identity (Metadata only) successfully saved to Firestore.');
+        } catch (e) {
+            activityLog(`Failed to save to Firestore: ${e.message}`, true);
+        }
+    };
+    
+    /** Initializes Firebase and handles authentication. */
+    const initFirebase = async () => {
+        const firebaseStatusEl = document.getElementById('firebaseStatus');
+        
+        if (!firebaseConfig || Object.keys(firebaseConfig).length === 0) {
+             activityLog('Firebase config is missing or empty. App cannot initialize.', true);
+             if (firebaseStatusEl) firebaseStatusEl.textContent = 'Config Error';
+             return;
+        }
+        
+        try {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+
+            onAuthStateChanged(auth, async (user) => {
+                const firebaseStatusEl_auth = document.getElementById('firebaseStatus'); 
+                const displayUserIdEl = document.getElementById('displayUserId');
+                
+                if (user) {
+                    userId = user.uid;
+                    if (displayUserIdEl) displayUserIdEl.textContent = userId;
+                    if (firebaseStatusEl_auth) {
+                        firebaseStatusEl_auth.textContent = 'Authenticated';
+                        firebaseStatusEl_auth.classList.remove('text-red-400');
+                        firebaseStatusEl_auth.classList.add('text-green-400');
+                    }
+                    activityLog(`User authenticated. ID: ${userId}`);
+                    setupIdentityListener(db, user);
+                } else {
+                    try {
+                        if (initialAuthToken) {
+                            activityLog('Attempting sign-in with custom token...');
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            activityLog('No custom token. Attempting anonymous sign-in...');
+                            await signInAnonymously(auth);
+                        }
+                    } catch(e) {
+                         activityLog(`Auth Error: ${e.message}. Attempting anonymous sign-in fallback.`, true);
+                         await signInAnonymously(auth);
+                    }
+                }
+                updateButtonStates(!!userId);
+            });
+            
+            activityLog('Firebase services initialized.');
+        } catch (e) {
+            activityLog(`Failed to initialize Firebase: ${e.message}`, true);
+            if (firebaseStatusEl) firebaseStatusEl.textContent = 'Error';
+        }
+    };
+
+
+    // --- GitHub Integration (No changes needed for GitHub structure, as it handles Base64 JSON) ---
+
+    /** Parses the GitHub file URL to extract necessary API components. */
+    const getApiContentDetails = (url) => {
+        try {
+            const blobMatch = url.match(/github\.com\/([^/]+)\/([^/]+)\/(?:blob|raw)\/([^/]+)\/(.*)/i);
+            if (blobMatch) {
+                const [, owner, repo, branch, path] = blobMatch;
+                return {
+                    owner: owner,
+                    repo: repo,
+                    branch: branch,
+                    path: decodeURIComponent(path), 
+                    pathEncoded: path, 
+                    isRaw: false
+                };
+            }
+            
+            const rawMatch = url.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.*)/i);
+            if (rawMatch) {
+                const [, owner, repo, branch, path] = rawMatch;
+                return {
+                    owner: owner,
+                    repo: repo,
+                    branch: branch,
+                    path: decodeURIComponent(path),
+                    pathEncoded: path,
+                    isRaw: true
+                };
+            }
+            throw new Error("Invalid GitHub URL format.");
+        } catch (e) {
+            throw new Error(`Invalid URL: ${url}. Details: ${e.message}`);
+        }
+    };
+    
+    /** Saves the binary state to GitHub. */
+    const saveBinaryStateToGitHub = async () => {
+        const token = loadGithubToken();
+        if (!token) {
+            showMessage("Authorization Required", "Please enter your GitHub Personal Access Token (PAT) before saving.", 'error');
+            return;
+        }
+        
+        updateCoreIdentity(); 
+        let base64Data;
+        try {
+            // The entire coreIdentity object (including the array of 150k numbers and partial data) is serialized to JSON 
+            // and then Base64 encoded for GitHub storage.
+            base64Data = jsonToBase64(coreIdentity);
+        } catch(e) {
+             showMessage("Serialization Error", `Could not convert identity to Base64. Error: ${e.message}`, 'error');
+             return;
+        }
+        
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `emg-core-binary-${timestamp}.bin`;
+        const path = `${BACKUP_PATH}${filename}`;
+
+        activityLog(`Attempting to save state to GitHub path: ${path}`);
+
+        try {
+            const apiUrl = `${GITHUB_API_URL}${path}`;
+            const response = await fetch(apiUrl, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `token ${token}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/vnd.github.v3+json'
+                },
+                body: JSON.stringify({
+                    message: `EMG Core Identity save: ${filename}`,
+                    content: base64Data,
+                    branch: 'main'
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: 'No JSON error details.' }));
+                throw new Error(`HTTP error ${response.status}: ${errorData.message || 'Unknown error during save.'}`);
+            }
+
+            activityLog(`State successfully saved to GitHub: ${filename}`);
+
+        } catch (e) {
+            activityLog(`Failed to save state to GitHub: ${e.message}`, true);
+            showMessage("GitHub Save Failed", `Could not save to GitHub. Check your token and permissions. Error: ${e.message}`, 'error');
+        }
+    };
+
+
+    /** Loads the binary state from GitHub with retry mechanism. */
+    const loadBinaryFromGitHub = async (specificUrl = null) => {
+        const token = loadGithubToken();
+        if (!token) {
+            showMessage("Authorization Required", "Please enter your GitHub Personal Access Token (PAT) before loading.", 'error');
+            return;
+        }
+
+        const maxRetries = 3;
+        const baseDelay = 1000;
+        
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                let fetchUrl;
+                let pathDetails = null;
+
+                if (specificUrl) {
+                    pathDetails = getApiContentDetails(specificUrl);
+                    fetchUrl = `https://api.github.com/repos/${pathDetails.owner}/${pathDetails.repo}/contents/${pathDetails.path}?ref=${pathDetails.branch}`;
+                    activityLog(`Attempting to load specific URL: ${pathDetails.path}`);
+                } else {
+                    // 1. Find the latest file in the backup folder
+                    const directoryUrl = `${GITHUB_API_URL}${BACKUP_PATH}`;
+                    activityLog('Fetching latest backup list...');
+                    
+                    let response = await fetch(directoryUrl, {
+                        headers: {
+                            'Authorization': `token ${token}`,
+                            'Accept': 'application/vnd.github.v3+json'
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch directory list (HTTP ${response.status}).`);
+                    }
+
+                    const files = await response.json();
+                    
+                    const latestFile = files
+                        .filter(f => f.type === 'file' && f.name.endsWith('.bin'))
+                        .sort((a, b) => b.name.localeCompare(a.name))[0]; // Sort descending by filename/timestamp
+
+                    if (!latestFile) {
+                        throw new Error('No .bin backup files found in the repository.');
+                    }
+
+                    fetchUrl = latestFile.url; // Use the file's API URL
+                    activityLog(`Found latest backup: ${latestFile.name}. Fetching content...`);
+                }
+
+                // 2. Fetch the content of the latest file
+                let response = await fetch(fetchUrl, {
+                    headers: {
+                        'Authorization': `token ${token}`,
+                        'Accept': 'application/vnd.github.v3+json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch file content (HTTP ${response.status}).`);
+                }
+                
+                const fileContent = await response.json();
+
+                if (fileContent.encoding !== 'base64' || !fileContent.content) {
+                    throw new Error('GitHub file content is not Base64 encoded as expected.');
+                }
+                
+                // 3. Decode the Base64 content to the full identity object
+                const decodedIdentity = base64ToJson(fileContent.content);
+                
+                injectIdentityState(decodedIdentity, 'GitHub Backup');
+                return; // Success, exit the retry loop
+
+            } catch (e) {
+                activityLog(`Attempt ${attempt} failed: ${e.message}`, true);
+                if (attempt === maxRetries) {
+                    showMessage("GitHub Load Failed", `Failed to load state after ${maxRetries} attempts. Error: ${e.message}`, 'error');
+                } else {
+                    const delay = baseDelay * (2 ** (attempt - 1));
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+    };
+
+
+    // --- Local File Injection (The fix is here) ---
+
+    const handleFileUpload = (event) => {
+        const file = event.target.files[0];
+        const statusEl = document.getElementById('fileLoadStatus');
+        if (!file) {
+            statusEl.textContent = 'No file selected.';
+            return;
+        }
+
+        const reader = new FileReader();
+        statusEl.textContent = 'Loading...';
+
+        reader.onload = () => {
+            try {
+                const rawBitstream = reader.result;
+
+                // 1. Check if the file looks like the expected ASCII bitstream
+                if (!/^[01]+$/.test(rawBitstream)) {
+                    throw new Error("File content must be a continuous stream of only '0' and '1' ASCII characters.");
+                }
+
+                // 2. Parse the bitstream into an array of numbers and check for partials
+                const { decodedValues, partialValue } = parseBitstream(rawBitstream);
+                const totalValues = decodedValues.length;
+
+                if (totalValues === 0 && !partialValue) {
+                     throw new Error("File parsed successfully, but contained zero valid numeric values.");
+                }
+
+                // 3. Inject the parsed data into the local Core Identity
+                updateCoreIdentity(); // Ensure other fields are up to date
+                injectIdentityState({
+                    persistentBitstream: decodedValues,
+                    partialBitstream: partialValue, // Store the 16 trailing bits here
+                    timestamp: Date.now()
+                }, `Local File: ${file.name}`);
+
+                statusEl.textContent = `Success: Loaded ${totalValues.toLocaleString()} x ${BIT_CHUNK_SIZE}b values.`;
+                statusEl.classList.remove('text-red-400');
+                statusEl.classList.add('text-green-400');
+
+            } catch (e) {
+                statusEl.textContent = `Error: ${e.message}`;
+                statusEl.classList.remove('text-green-400');
+                statusEl.classList.add('text-red-400');
+                activityLog(`Failed to inject local state: ${e.message}`, true);
+            }
+        };
+
+        // CRITICAL FIX: Read the binary file as TEXT for ASCII bitstream parsing
+        reader.readAsText(file);
+    };
+
+    // --- Three.js Visualization ---
+    
+    let scene, camera, renderer, dodecahedron;
+    let isDragging = false;
+    let previousMousePosition = {
+        x: 0,
+        y: 0
+    };
+
+    const initThree = () => {
+        const container = document.getElementById('coreGemContainer');
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+
+        // Scene
+        scene = new THREE.Scene();
+
+        // Camera
+        camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+        camera.position.z = 2;
+
+        // Renderer
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(width, height);
+        container.appendChild(renderer.domElement);
+
+        // Geometry (Dodecahedron - 12 faces, symbolizing complexity/structure)
+        const geometry = new THREE.DodecahedronGeometry(1, 0); 
+        
+        // Material
+        const material = new THREE.MeshPhongMaterial({
+            color: 0xff9900, // Core Gem Color
+            shininess: 100,
+            flatShading: false,
+            transparent: true,
+            opacity: 0.9,
+            wireframe: false
+        });
+        
+        // Wireframe (Inner structure/Data flow)
+        const wireframeMaterial = new THREE.MeshBasicMaterial({
+            color: 0xcccccc, 
+            wireframe: true,
+            transparent: true,
+            opacity: 0.3
+        });
+        
+        dodecahedron = new THREE.Group();
+        const solid = new THREE.Mesh(geometry, material);
+        const wireframe = new THREE.Mesh(geometry, wireframeMaterial);
+        
+        dodecahedron.add(solid);
+        dodecahedron.add(wireframe);
+        scene.add(dodecahedron);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x404040, 5); // soft white light
+        scene.add(ambientLight);
+
+        const pointLight = new THREE.PointLight(0xffffff, 50, 100);
+        pointLight.position.set(5, 5, 5);
+        scene.add(pointLight);
+
+        // Handle resizing
+        window.addEventListener('resize', onWindowResize, false);
+
+        // Mouse/Touch controls for rotation
+        container.addEventListener('mousedown', onMouseDown, false);
+        container.addEventListener('mouseup', onMouseUp, false);
+        container.addEventListener('mousemove', onMouseMove, false);
+        container.addEventListener('touchstart', onTouchStart, false);
+        container.addEventListener('touchend', onMouseUp, false); // touchend = mouseup
+        container.addEventListener('touchmove', onTouchMove, false);
+
+        animate();
+    };
+
+    const onWindowResize = () => {
+        const container = document.getElementById('coreGemContainer');
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+        renderer.setSize(width, height);
+    };
+
+    const onMouseDown = (e) => {
+        isDragging = true;
+        previousMousePosition.x = e.clientX;
+        previousMousePosition.y = e.clientY;
+        e.preventDefault();
+    };
+
+    const onMouseUp = () => {
+        isDragging = false;
+    };
+
+    const onMouseMove = (e) => {
+        if (!isDragging) return;
+
+        const deltaX = e.clientX - previousMousePosition.x;
+        const deltaY = e.clientY - previousMousePosition.y;
+
+        dodecahedron.rotation.y += deltaX * 0.005;
+        dodecahedron.rotation.x += deltaY * 0.005;
+
+        previousMousePosition.x = e.clientX;
+        previousMousePosition.y = e.clientY;
+    };
+
+    const onTouchStart = (e) => {
+        if (e.touches.length === 1) {
+            isDragging = true;
+            previousMousePosition.x = e.touches[0].clientX;
+            previousMousePosition.y = e.touches[0].clientY;
+        }
+        e.preventDefault();
+    };
+
+    const onTouchMove = (e) => {
+        if (!isDragging || e.touches.length !== 1) return;
+
+        const deltaX = e.touches[0].clientX - previousMousePosition.x;
+        const deltaY = e.touches[0].clientY - previousMousePosition.y;
+
+        dodecahedron.rotation.y += deltaX * 0.005;
+        dodecahedron.rotation.x += deltaY * 0.005;
+
+        previousMousePosition.x = e.touches[0].clientX;
+        previousMousePosition.y = e.touches[0].clientY;
+        e.preventDefault();
+    };
+
+    const animate = () => {
+        requestAnimationFrame(animate);
+
+        // Auto-rotation if not dragging
+        if (!isDragging) {
+            if (dodecahedron) {
+                dodecahedron.rotation.x += 0.001;
+                dodecahedron.rotation.y += 0.002;
+            }
+        }
+
+        renderer.render(scene, camera);
+    };
+
+
+    // --- Initialization ---
+
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('displayAppId').textContent = appId;
+        loadGithubToken();
+
+        initThree();
+        initFirebase();
+
+        // Attach listeners
+        document.getElementById('updateIdentityBtn').addEventListener('click', saveIdentityToFirestore);
+        document.getElementById('saveBinaryStateBtn').addEventListener('click', saveBinaryStateToGitHub);
+        document.getElementById('loadBinaryStateBtn').addEventListener('click', () => {
+            const specificUrl = document.getElementById('specificBackupUrl').value.trim();
+            loadBinaryFromGitHub(specificUrl || null);
+        });
+        document.getElementById('fileInput').addEventListener('change', handleFileUpload);
+    });
+    
+    // Ensure animate loop starts on window load for Three.js
+    window.onload = function () {
+        // animate() is already called in initThree() which is in DOMContentLoaded, 
+        // but this ensures we don't miss anything.
+    }
+</script>
+</body>
+</html>
